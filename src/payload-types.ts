@@ -172,9 +172,17 @@ export interface Media {
  */
 export interface Asset {
   id: string;
-  name: string;
-  type?: string | null;
-  status?: string | null;
+  assetId: number;
+  creator: string;
+  title?: string | null;
+  description?: string | null;
+  category?: string | null;
+  tags?:
+    | {
+        tag?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -184,8 +192,31 @@ export interface Asset {
  */
 export interface Proof {
   id: string;
-  name: string;
-  status?: string | null;
+  submittedBy: string;
+  /**
+   * owner, counterparty, validator, etc.
+   */
+  role: string;
+  process?: (string | null) | Process;
+  /**
+   * photo, video, document, bundle
+   */
+  type: string;
+  /**
+   * multi-angle, context-shot, etc.
+   */
+  tags?:
+    | {
+        tag?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  url: string;
+  /**
+   * keccak256(original file)
+   */
+  hash: string;
+  txHash: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -195,8 +226,43 @@ export interface Proof {
  */
 export interface Process {
   id: string;
-  name: string;
-  status?: string | null;
+  /**
+   * e.g., "rental"
+   */
+  type: string;
+  template?: (string | null) | ProcessTemplate;
+  assets?: (string | Asset)[] | null;
+  participants?: {
+    owner?: string | null;
+    counterparty?: string | null;
+    validator?: string | null;
+    witness?: string | null;
+  };
+  /**
+   * Append-only action log
+   */
+  events?:
+    | {
+        stepId: string;
+        actor: string;
+        role: string;
+        /**
+         * claim, attestation, etc.
+         */
+        actionType: string;
+        proofId?: (string | null) | Proof;
+        timestamp: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * active, completed, disputed, expired
+   */
+  softStatus: string;
+  timeWindow: {
+    start: string;
+    end: string;
+  };
   updatedAt: string;
   createdAt: string;
 }
@@ -206,8 +272,45 @@ export interface Process {
  */
 export interface ProcessTemplate {
   id: string;
+  /**
+   * e.g., "Rental"
+   */
   name: string;
-  status?: string | null;
+  /**
+   * e.g., "rental"
+   */
+  processType: string;
+  /**
+   * owner, counterparty, validator, etc.
+   */
+  roles: {
+    role?: string | null;
+    id?: string | null;
+  }[];
+  steps: {
+    stepId: string;
+    name: string;
+    actorRole: string;
+    /**
+     * claim, attestation, proof
+     */
+    actionType: string;
+    requiredProofTypes?:
+      | {
+          proofType?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+    optional?: boolean | null;
+    id?: string | null;
+  }[];
+  timeWindow: {
+    /**
+     * fixed, flexible
+     */
+    type: string;
+    durationHours: number;
+  };
   updatedAt: string;
   createdAt: string;
 }
@@ -346,9 +449,17 @@ export interface MediaSelect<T extends boolean = true> {
  * via the `definition` "assets_select".
  */
 export interface AssetsSelect<T extends boolean = true> {
-  name?: T;
-  type?: T;
-  status?: T;
+  assetId?: T;
+  creator?: T;
+  title?: T;
+  description?: T;
+  category?: T;
+  tags?:
+    | T
+    | {
+        tag?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
@@ -357,8 +468,19 @@ export interface AssetsSelect<T extends boolean = true> {
  * via the `definition` "proofs_select".
  */
 export interface ProofsSelect<T extends boolean = true> {
-  name?: T;
-  status?: T;
+  submittedBy?: T;
+  role?: T;
+  process?: T;
+  type?: T;
+  tags?:
+    | T
+    | {
+        tag?: T;
+        id?: T;
+      };
+  url?: T;
+  hash?: T;
+  txHash?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -367,8 +489,35 @@ export interface ProofsSelect<T extends boolean = true> {
  * via the `definition` "processes_select".
  */
 export interface ProcessesSelect<T extends boolean = true> {
-  name?: T;
-  status?: T;
+  type?: T;
+  template?: T;
+  assets?: T;
+  participants?:
+    | T
+    | {
+        owner?: T;
+        counterparty?: T;
+        validator?: T;
+        witness?: T;
+      };
+  events?:
+    | T
+    | {
+        stepId?: T;
+        actor?: T;
+        role?: T;
+        actionType?: T;
+        proofId?: T;
+        timestamp?: T;
+        id?: T;
+      };
+  softStatus?: T;
+  timeWindow?:
+    | T
+    | {
+        start?: T;
+        end?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
@@ -378,7 +527,35 @@ export interface ProcessesSelect<T extends boolean = true> {
  */
 export interface ProcessTemplatesSelect<T extends boolean = true> {
   name?: T;
-  status?: T;
+  processType?: T;
+  roles?:
+    | T
+    | {
+        role?: T;
+        id?: T;
+      };
+  steps?:
+    | T
+    | {
+        stepId?: T;
+        name?: T;
+        actorRole?: T;
+        actionType?: T;
+        requiredProofTypes?:
+          | T
+          | {
+              proofType?: T;
+              id?: T;
+            };
+        optional?: T;
+        id?: T;
+      };
+  timeWindow?:
+    | T
+    | {
+        type?: T;
+        durationHours?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
