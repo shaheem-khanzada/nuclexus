@@ -4,10 +4,9 @@ export const Assets: CollectionConfig = {
   slug: 'assets',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['assetId', 'title', 'creatorWallet', 'category', 'createdAt'],
+    defaultColumns: ['assetId', 'title', 'creator', 'latestProofHash', 'updatedAt'],
   },
   fields: [
-    // On-chain reference
     {
       name: 'assetId',
       type: 'number',
@@ -21,7 +20,16 @@ export const Assets: CollectionConfig = {
       required: true,
       index: true,
     },
-    // Optional display metadata
+    {
+      name: 'latestProofHash',
+      type: 'text',
+      admin: { description: 'Updated from on-chain events (e.g. PROOF_SUBMITTED).' },
+    },
+    {
+      name: 'url',
+      type: 'text',
+      admin: { description: 'URL of uploaded proof/file (from upload API).' },
+    },
     {
       name: 'title',
       type: 'text',
@@ -37,12 +45,13 @@ export const Assets: CollectionConfig = {
     {
       name: 'tags',
       type: 'array',
-      fields: [
-        {
-          name: 'tag',
-          type: 'text',
-        },
-      ],
+      fields: [{ name: 'tag', type: 'text' }],
     },
   ],
+  access: {
+    read: () => true,
+    create: () => true,
+    update: () => true,
+  },
+  timestamps: true,
 }

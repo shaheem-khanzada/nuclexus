@@ -70,9 +70,9 @@ export interface Config {
     users: User;
     media: Media;
     assets: Asset;
-    proofs: Proof;
+    events: Event;
+    templates: Template;
     processes: Process;
-    'process-templates': ProcessTemplate;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -83,9 +83,9 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     assets: AssetsSelect<false> | AssetsSelect<true>;
-    proofs: ProofsSelect<false> | ProofsSelect<true>;
+    events: EventsSelect<false> | EventsSelect<true>;
+    templates: TemplatesSelect<false> | TemplatesSelect<true>;
     processes: ProcessesSelect<false> | ProcessesSelect<true>;
-    'process-templates': ProcessTemplatesSelect<false> | ProcessTemplatesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -174,6 +174,14 @@ export interface Asset {
   id: string;
   assetId: number;
   creator: string;
+  /**
+   * Updated from on-chain events (e.g. PROOF_SUBMITTED).
+   */
+  latestProofHash?: string | null;
+  /**
+   * URL of uploaded proof/file (from upload API).
+   */
+  url?: string | null;
   title?: string | null;
   description?: string | null;
   category?: string | null;
@@ -187,130 +195,142 @@ export interface Asset {
   createdAt: string;
 }
 /**
+ * Immutable event log. On-chain events arrive via Alchemy webhook; off-chain events are created directly.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "proofs".
+ * via the `definition` "events".
  */
-export interface Proof {
+export interface Event {
   id: string;
-  submittedBy: string;
   /**
-   * owner, counterparty, validator, etc.
-   */
-  role: string;
-  process?: (string | null) | Process;
-  /**
-   * photo, video, document, bundle
+   * Free-form event type string (e.g. CREATED, PROOF_SUBMITTED, HANDOVER_PROOF, INCIDENT).
    */
   type: string;
+  source: 'on-chain' | 'off-chain';
+  assetId: number;
   /**
-   * multi-angle, context-shot, etc.
+   * Payload document ID of the Process this event belongs to (optional).
    */
-  tags?:
+  processId?: string | null;
+  sender: string;
+  proofHash?: string | null;
+  timestamp: number;
+  validator?: string | null;
+  transactionHash?: string | null;
+  blockNumber?: string | null;
+  /**
+   * Arbitrary data for this event (negotiation terms, incident details, deposit resolution, etc.).
+   */
+  metadata?:
     | {
-        tag?: string | null;
-        id?: string | null;
-      }[]
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
     | null;
-  url: string;
-  /**
-   * keccak256(original file)
-   */
-  hash: string;
-  txHash: string;
   updatedAt: string;
   createdAt: string;
 }
 /**
+ * Reusable service blueprints (rental, lease, etc.). A Process is created from a Template.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates".
+ */
+export interface Template {
+  id: string;
+  name: string;
+  /**
+   * Service type. Add more options as new services are introduced.
+   */
+  type: 'rental';
+  description?: string | null;
+  /**
+   * Roles required for this process type. Each participant is assigned a role.
+   */
+  roles: {
+    name: string;
+    label: string;
+    id?: string | null;
+  }[];
+  /**
+   * Wallet address of the template author.
+   */
+  creator: string;
+  terms: {
+    price: number;
+    currency?: string | null;
+    duration: number;
+    durationUnit: 'hours' | 'days' | 'weeks' | 'months';
+    deposit: number;
+    negotiable?: boolean | null;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Active instance of a Template applied to an Asset. Tracks the full lifecycle.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "processes".
  */
 export interface Process {
   id: string;
+  assetId: number;
+  template: string | Template;
   /**
-   * e.g., "rental"
+   * Wallet address of the asset owner who initiated the process.
    */
-  type: string;
-  template?: (string | null) | ProcessTemplate;
-  assets?: (string | Asset)[] | null;
-  participants?: {
-    owner?: string | null;
-    counterparty?: string | null;
-    validator?: string | null;
-    witness?: string | null;
-  };
+  owner: string;
   /**
-   * Append-only action log
+   * Role-to-wallet mapping. Every template role must be assigned an address.
    */
-  events?:
-    | {
-        stepId: string;
-        actor: string;
-        role: string;
-        /**
-         * claim, attestation, etc.
-         */
-        actionType: string;
-        proofId?: (string | null) | Proof;
-        timestamp: string;
-        id?: string | null;
-      }[]
-    | null;
-  /**
-   * active, completed, disputed, expired
-   */
-  softStatus: string;
-  timeWindow: {
-    start: string;
-    end: string;
-  };
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "process-templates".
- */
-export interface ProcessTemplate {
-  id: string;
-  /**
-   * e.g., "Rental"
-   */
-  name: string;
-  /**
-   * e.g., "rental"
-   */
-  processType: string;
-  /**
-   * owner, counterparty, validator, etc.
-   */
-  roles: {
-    role?: string | null;
+  participants: {
+    role: string;
+    address: string;
     id?: string | null;
   }[];
-  steps: {
-    stepId: string;
-    name: string;
-    actorRole: string;
-    /**
-     * claim, attestation, proof
-     */
-    actionType: string;
-    requiredProofTypes?:
-      | {
-          proofType?: string | null;
-          id?: string | null;
-        }[]
-      | null;
-    optional?: boolean | null;
-    id?: string | null;
-  }[];
-  timeWindow: {
-    /**
-     * fixed, flexible
-     */
-    type: string;
-    durationHours: number;
+  status:
+    | 'DRAFT'
+    | 'PENDING_RENTER'
+    | 'NEGOTIATING'
+    | 'TERMS_AGREED'
+    | 'DEPOSIT_PENDING'
+    | 'DEPOSIT_DECLARED'
+    | 'ACTIVE'
+    | 'RETURN_PENDING'
+    | 'RETURN_VERIFIED'
+    | 'DEPOSIT_RESOLVING'
+    | 'COMPLETED'
+    | 'REJECTED';
+  /**
+   * Snapshot of the final negotiated terms.
+   */
+  agreedTerms?: {
+    price?: number | null;
+    currency?: string | null;
+    duration?: number | null;
+    durationUnit?: ('hours' | 'days' | 'weeks' | 'months') | null;
+    deposit?: number | null;
   };
+  /**
+   * Deadline for negotiation window (if negotiable).
+   */
+  negotiationDeadline?: string | null;
+  /**
+   * Set when rental becomes ACTIVE.
+   */
+  startDate?: string | null;
+  /**
+   * Computed from startDate + agreed duration when ACTIVE.
+   */
+  endDate?: string | null;
+  /**
+   * Set by owner when resolving deposit at end of rental.
+   */
+  depositResolution?: ('returned' | 'partial' | 'withheld') | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -351,16 +371,16 @@ export interface PayloadLockedDocument {
         value: string | Asset;
       } | null)
     | ({
-        relationTo: 'proofs';
-        value: string | Proof;
+        relationTo: 'events';
+        value: string | Event;
+      } | null)
+    | ({
+        relationTo: 'templates';
+        value: string | Template;
       } | null)
     | ({
         relationTo: 'processes';
         value: string | Process;
-      } | null)
-    | ({
-        relationTo: 'process-templates';
-        value: string | ProcessTemplate;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -451,6 +471,8 @@ export interface MediaSelect<T extends boolean = true> {
 export interface AssetsSelect<T extends boolean = true> {
   assetId?: T;
   creator?: T;
+  latestProofHash?: T;
+  url?: T;
   title?: T;
   description?: T;
   category?: T;
@@ -465,22 +487,49 @@ export interface AssetsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "proofs_select".
+ * via the `definition` "events_select".
  */
-export interface ProofsSelect<T extends boolean = true> {
-  submittedBy?: T;
-  role?: T;
-  process?: T;
+export interface EventsSelect<T extends boolean = true> {
   type?: T;
-  tags?:
+  source?: T;
+  assetId?: T;
+  processId?: T;
+  sender?: T;
+  proofHash?: T;
+  timestamp?: T;
+  validator?: T;
+  transactionHash?: T;
+  blockNumber?: T;
+  metadata?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates_select".
+ */
+export interface TemplatesSelect<T extends boolean = true> {
+  name?: T;
+  type?: T;
+  description?: T;
+  roles?:
     | T
     | {
-        tag?: T;
+        name?: T;
+        label?: T;
         id?: T;
       };
-  url?: T;
-  hash?: T;
-  txHash?: T;
+  creator?: T;
+  terms?:
+    | T
+    | {
+        price?: T;
+        currency?: T;
+        duration?: T;
+        durationUnit?: T;
+        deposit?: T;
+        negotiable?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
@@ -489,73 +538,30 @@ export interface ProofsSelect<T extends boolean = true> {
  * via the `definition` "processes_select".
  */
 export interface ProcessesSelect<T extends boolean = true> {
-  type?: T;
+  assetId?: T;
   template?: T;
-  assets?: T;
+  owner?: T;
   participants?:
     | T
     | {
-        owner?: T;
-        counterparty?: T;
-        validator?: T;
-        witness?: T;
-      };
-  events?:
-    | T
-    | {
-        stepId?: T;
-        actor?: T;
         role?: T;
-        actionType?: T;
-        proofId?: T;
-        timestamp?: T;
+        address?: T;
         id?: T;
       };
-  softStatus?: T;
-  timeWindow?:
+  status?: T;
+  agreedTerms?:
     | T
     | {
-        start?: T;
-        end?: T;
+        price?: T;
+        currency?: T;
+        duration?: T;
+        durationUnit?: T;
+        deposit?: T;
       };
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "process-templates_select".
- */
-export interface ProcessTemplatesSelect<T extends boolean = true> {
-  name?: T;
-  processType?: T;
-  roles?:
-    | T
-    | {
-        role?: T;
-        id?: T;
-      };
-  steps?:
-    | T
-    | {
-        stepId?: T;
-        name?: T;
-        actorRole?: T;
-        actionType?: T;
-        requiredProofTypes?:
-          | T
-          | {
-              proofType?: T;
-              id?: T;
-            };
-        optional?: T;
-        id?: T;
-      };
-  timeWindow?:
-    | T
-    | {
-        type?: T;
-        durationHours?: T;
-      };
+  negotiationDeadline?: T;
+  startDate?: T;
+  endDate?: T;
+  depositResolution?: T;
   updatedAt?: T;
   createdAt?: T;
 }

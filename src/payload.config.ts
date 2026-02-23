@@ -6,11 +6,12 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 
 import { Assets } from './collections/Assets'
+import { Events } from './collections/Events'
 import { Media } from './collections/Media'
 import { Processes } from './collections/Processes'
-import { ProcessTemplates } from './collections/ProcessTemplates'
-import { Proofs } from './collections/Proofs'
+import { Templates } from './collections/Templates'
 import { Users } from './collections/Users'
+import { contractTxEndpoints } from './endpoints'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -22,14 +23,15 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Media, Assets, Proofs, Processes, ProcessTemplates],
+  collections: [Users, Media, Assets, Events, Templates, Processes],
+  endpoints: contractTxEndpoints,
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   db: mongooseAdapter({
-    url: process.env.DATABASE_URL || '',
+    url: process.env.MONGODB_URI || '',
   }),
   sharp,
   plugins: [],

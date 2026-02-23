@@ -1,18 +1,21 @@
 import React from 'react'
-import './styles.css'
+import { ClientProviders } from '@/components/ClientProviders'
+import './globals.css'
 
 export const metadata = {
-  description: 'A blank template using Payload in a Next.js app.',
-  title: 'Payload Blank Template',
+  description: 'Nuclexus — Asset registry and proof verification.',
+  title: 'Nuclexus',
 }
 
 export default async function RootLayout(props: { children: React.ReactNode }) {
   const { children } = props
 
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body>
-        <main>{children}</main>
+        <ClientProviders>
+          <main className="min-h-screen">{children}</main>
+        </ClientProviders>
       </body>
     </html>
   )
