@@ -94,6 +94,16 @@ export const Templates: CollectionConfig = {
           type: 'checkbox',
           defaultValue: false,
         },
+        {
+          name: 'negotiationDuration',
+          type: 'number',
+          defaultValue: 30,
+          min: 1,
+          admin: {
+            description: 'Negotiation window in minutes (default 30). Only used when negotiable is true.',
+            condition: (data) => data?.terms?.negotiable === true,
+          },
+        },
       ],
     },
   ],

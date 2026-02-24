@@ -1,5 +1,6 @@
 import type { Endpoint } from 'payload'
 import { encodeCreateAsset, encodeSubmitProof, encodeVerifyAsset } from '@/lib/contracts/encode'
+import { EVENT_TYPES } from '@/lib/constants/eventTypes'
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? ''
 
@@ -43,7 +44,7 @@ const getCreateAssetTx: Endpoint = {
     const err = requireContract()
     if (err) return err
     const url = new URL(req.url ?? '', 'http://localhost')
-    const eventType = url.searchParams.get('eventType') ?? 'CREATED'
+    const eventType = url.searchParams.get('eventType') ?? EVENT_TYPES.CREATED
     try {
       const tx = encodeCreateAsset(CONTRACT_ADDRESS, eventType)
       return Response.json({
@@ -69,7 +70,7 @@ const postSubmitProofTx: Endpoint = {
     if (err) return err
     const parsed = await parseProofBody(req as Request)
     if (parsed instanceof Response) return parsed
-    const eventType = parsed.eventType ?? 'PROOF_SUBMITTED'
+    const eventType = parsed.eventType ?? EVENT_TYPES.PROOF_SUBMITTED
     try {
       const tx = encodeSubmitProof(CONTRACT_ADDRESS, parsed.assetId, parsed.hash, eventType, parsed.processId)
       return Response.json({
@@ -96,9 +97,9 @@ const postVerifyTx: Endpoint = {
     if (err) return err
     const parsed = await parseProofBody(req as Request)
     if (parsed instanceof Response) return parsed
-    const eventType = parsed.eventType ?? 'ATTESTATION'
+    const eventType = parsed.eventType ?? EVENT_TYPES.ATTESTATION
     try {
-      const tx = encodeVerifyAsset(CONTRACT_ADDRESS, parsed.assetId, parsed.hash, eventType)
+      const tx = encodeVerifyAsset(CONTRACT_ADDRESS, parsed.assetId, parsed.hash, eventType, parsed.processId)
       return Response.json({
         tx,
         contractAddress: CONTRACT_ADDRESS,

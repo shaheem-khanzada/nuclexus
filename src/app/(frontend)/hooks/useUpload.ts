@@ -6,7 +6,8 @@ import { assetKeys, uploadFile } from '@/lib/api'
 export function useUpload() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (file: File) => uploadFile(file),
+    mutationFn: ({ file, processId }: { file: File; processId?: string }) =>
+      uploadFile(file, processId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: assetKeys.all })
     },

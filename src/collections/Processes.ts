@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { processResetAcceptanceBeforeChange } from './hooks'
 
 export const PROCESS_STATUSES = [
   'DRAFT',
@@ -13,6 +14,7 @@ export const PROCESS_STATUSES = [
   'DEPOSIT_RESOLVING',
   'COMPLETED',
   'REJECTED',
+  'EXPIRED',
 ] as const
 
 export type ProcessStatus = (typeof PROCESS_STATUSES)[number]
@@ -23,6 +25,9 @@ export const Processes: CollectionConfig = {
     useAsTitle: 'status',
     defaultColumns: ['assetId', 'status', 'owner', 'updatedAt'],
     description: 'Active instance of a Template applied to an Asset. Tracks the full lifecycle.',
+  },
+  hooks: {
+    beforeChange: [processResetAcceptanceBeforeChange],
   },
   fields: [
     {
@@ -84,9 +89,21 @@ export const Processes: CollectionConfig = {
       ],
     },
     {
+      name: 'ownerAccepted',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { description: 'Whether the owner has accepted the current terms during negotiation.' },
+    },
+    {
+      name: 'renterAccepted',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { description: 'Whether the renter has accepted the current terms during negotiation.' },
+    },
+    {
       name: 'negotiationDeadline',
       type: 'date',
-      admin: { description: 'Deadline for negotiation window (if negotiable).' },
+      admin: { description: 'Auto-set when negotiation starts. Deadline for the negotiation window.' },
     },
     {
       name: 'startDate',

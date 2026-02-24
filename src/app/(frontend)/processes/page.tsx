@@ -25,6 +25,7 @@ const STATUS_COLOR: Record<string, string> = {
   DEPOSIT_RESOLVING: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
   COMPLETED: 'bg-green-500/20 text-green-600 dark:text-green-400',
   REJECTED: 'bg-red-500/20 text-red-600 dark:text-red-400',
+  EXPIRED: 'bg-orange-500/20 text-orange-600 dark:text-orange-400',
 }
 
 function templateName(t: ProcessItem['template']): string {

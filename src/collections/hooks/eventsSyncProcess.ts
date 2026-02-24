@@ -1,5 +1,6 @@
 import type { CollectionAfterChangeHook } from 'payload'
 import type { Template } from '@/payload-types'
+import { EVENT_TYPES } from '@/lib/constants/eventTypes'
 
 const UNIT_MS: Record<string, number> = {
   hours: 60 * 60 * 1000,
@@ -9,17 +10,27 @@ const UNIT_MS: Record<string, number> = {
 }
 
 const EVENT_TO_STATUS: Record<string, string> = {
-  RENTAL_INITIATED: 'PENDING_RENTER',
-  PARTICIPATION_CONFIRMED: 'PENDING_RENTER',
-  TERMS_ACCEPTED: 'TERMS_AGREED',
-  TERMS_REJECTED: 'REJECTED',
-  DEPOSIT_DECLARED: 'DEPOSIT_PENDING',
-  DEPOSIT_CONFIRMED: 'DEPOSIT_DECLARED',
-  HANDOVER_PROOF: 'ACTIVE',
-  RETURN_PROOF: 'RETURN_PENDING',
-  RETURN_VERIFIED: 'RETURN_VERIFIED',
-  DEPOSIT_RESOLVED: 'DEPOSIT_RESOLVING',
-  RESOLUTION_CONFIRMED: 'COMPLETED',
+  [EVENT_TYPES.RENTAL_INITIATED]: 'PENDING_RENTER',
+  [EVENT_TYPES.TERMS_REJECTED]: 'REJECTED',
+  [EVENT_TYPES.NEGOTIATION_EXPIRED]: 'EXPIRED',
+  [EVENT_TYPES.DEPOSIT_DECLARED]: 'DEPOSIT_PENDING',
+  [EVENT_TYPES.DEPOSIT_CONFIRMED]: 'DEPOSIT_DECLARED',
+  [EVENT_TYPES.HANDOVER_PROOF]: 'ACTIVE',
+  [EVENT_TYPES.RETURN_PROOF]: 'RETURN_PENDING',
+  [EVENT_TYPES.RETURN_VERIFIED]: 'RETURN_VERIFIED',
+  [EVENT_TYPES.DEPOSIT_RESOLVED]: 'DEPOSIT_RESOLVING',
+  [EVENT_TYPES.RESOLUTION_CONFIRMED]: 'COMPLETED',
+}
+
+/**
+ * Resolve the sender's role from the process participants array.
+ */
+function senderRole(
+  sender: string,
+  participants: Array<{ role: string; address: string }>,
+): string | null {
+  const addr = sender.toLowerCase()
+  return participants.find((p) => p.address.toLowerCase() === addr)?.role ?? null
 }
 
 /**
@@ -32,7 +43,7 @@ export const eventsSyncProcessAfterChange: CollectionAfterChangeHook = async ({
   req,
 }) => {
   if (operation !== 'create' || !req?.payload) return
-  const { type, processId, metadata } = doc
+  const { type, processId, metadata, sender } = doc
   if (!processId || !type) return
 
   const process = await req.payload.findByID({
@@ -45,35 +56,55 @@ export const eventsSyncProcessAfterChange: CollectionAfterChangeHook = async ({
 
   const updateData: Record<string, unknown> = {}
 
-  if (type === 'PARTICIPATION_CONFIRMED') {
+  if (type === EVENT_TYPES.PARTICIPATION_CONFIRMED) {
     const template = typeof process.template === 'object' ? (process.template as Template) : null
     const negotiable = template?.terms?.negotiable
-    updateData.status = negotiable ? 'NEGOTIATING' : 'TERMS_AGREED'
 
-    if (!negotiable && template?.terms) {
+    if (negotiable) {
+      updateData.status = 'NEGOTIATING'
+      updateData.ownerAccepted = false
+      updateData.renterAccepted = false
+
+      const durationMinutes = template?.terms?.negotiationDuration ?? 30
+      const deadline = new Date(Date.now() + durationMinutes * 60 * 1000)
+      updateData.negotiationDeadline = deadline.toISOString()
+
       updateData.agreedTerms = {
-        price: template.terms.price,
-        currency: template.terms.currency,
-        duration: template.terms.duration,
-        durationUnit: template.terms.durationUnit,
-        deposit: template.terms.deposit,
+        price: template?.terms?.price,
+        currency: template?.terms?.currency,
+        duration: template?.terms?.duration,
+        durationUnit: template?.terms?.durationUnit,
+        deposit: template?.terms?.deposit,
       }
-    }
-  } else if (type === 'TERMS_ACCEPTED') {
-    updateData.status = 'TERMS_AGREED'
-    if (metadata && typeof metadata === 'object') {
-      const m = metadata as Record<string, unknown>
-      if (m.price != null || m.duration != null || m.deposit != null) {
+    } else {
+      updateData.status = 'TERMS_AGREED'
+      if (template?.terms) {
         updateData.agreedTerms = {
-          price: m.price,
-          currency: m.currency,
-          duration: m.duration,
-          durationUnit: m.durationUnit,
-          deposit: m.deposit,
+          price: template.terms.price,
+          currency: template.terms.currency,
+          duration: template.terms.duration,
+          durationUnit: template.terms.durationUnit,
+          deposit: template.terms.deposit,
         }
       }
     }
-  } else if (type === 'HANDOVER_PROOF') {
+  } else if (type === EVENT_TYPES.TERMS_ACCEPTED) {
+    const participants = (process.participants ?? []) as Array<{ role: string; address: string }>
+    const role = senderRole(sender ?? '', participants)
+
+    let ownerAccepted = Boolean(process.ownerAccepted)
+    let renterAccepted = Boolean(process.renterAccepted)
+
+    if (role === 'owner') ownerAccepted = true
+    if (role === 'renter') renterAccepted = true
+
+    updateData.ownerAccepted = ownerAccepted
+    updateData.renterAccepted = renterAccepted
+
+    if (ownerAccepted && renterAccepted) {
+      updateData.status = 'TERMS_AGREED'
+    }
+  } else if (type === EVENT_TYPES.HANDOVER_PROOF) {
     const now = new Date()
     updateData.status = 'ACTIVE'
     updateData.startDate = now.toISOString()
@@ -84,7 +115,7 @@ export const eventsSyncProcessAfterChange: CollectionAfterChangeHook = async ({
       const end = new Date(now.getTime() + agreed.duration * ms)
       updateData.endDate = end.toISOString()
     }
-  } else if (type === 'DEPOSIT_RESOLVED') {
+  } else if (type === EVENT_TYPES.DEPOSIT_RESOLVED) {
     updateData.status = 'DEPOSIT_RESOLVING'
     if (metadata && typeof metadata === 'object') {
       const m = metadata as Record<string, unknown>

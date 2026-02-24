@@ -62,10 +62,6 @@ export const Events: CollectionConfig = {
       required: true,
     },
     {
-      name: 'validator',
-      type: 'text',
-    },
-    {
       name: 'transactionHash',
       type: 'text',
       index: true,

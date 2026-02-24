@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { EVENT_TYPES } from '@/lib/constants/eventTypes'
 
 const STATUS_COLOR: Record<string, string> = {
   DRAFT: 'bg-muted text-muted-foreground',
@@ -32,11 +33,12 @@ const STATUS_COLOR: Record<string, string> = {
   DEPOSIT_RESOLVING: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
   COMPLETED: 'bg-green-500/20 text-green-600 dark:text-green-400',
   REJECTED: 'bg-red-500/20 text-red-600 dark:text-red-400',
+  EXPIRED: 'bg-orange-500/20 text-orange-600 dark:text-orange-400',
 }
 
 const DURATION_UNITS = ['hours', 'days', 'weeks', 'months'] as const
 
-const PROOF_EVENT_TYPES = new Set(['HANDOVER_PROOF', 'RETURN_PROOF'])
+const PROOF_EVENT_TYPES: Set<string> = new Set([EVENT_TYPES.HANDOVER_PROOF, EVENT_TYPES.RETURN_PROOF])
 const VERIFIER_ROLES = new Set(['validator', 'witness'])
 
 type TermsForm = {
@@ -77,7 +79,8 @@ export default function ProcessDetailPage() {
   const [incidentDesc, setIncidentDesc] = useState('')
   const [editingTerms, setEditingTerms] = useState(false)
   const [termsForm, setTermsForm] = useState<TermsForm>(termsToForm(null))
-  const [deadline, setDeadline] = useState('')
+  const [countdown, setCountdown] = useState<string | null>(null)
+  const [deadlineExpired, setDeadlineExpired] = useState(false)
 
   const error = queryError instanceof Error ? queryError.message : queryError ? 'Failed to load' : null
 
@@ -112,8 +115,43 @@ export default function ProcessDetailPage() {
     if (!proc) return
     const source = proc.agreedTerms ?? template?.terms
     setTermsForm(termsToForm(source))
-    setDeadline(proc.negotiationDeadline ? proc.negotiationDeadline.slice(0, 16) : '')
   }, [proc, template])
+
+  // Countdown timer for negotiation deadline
+  useEffect(() => {
+    if (proc?.status !== 'NEGOTIATING' || !proc.negotiationDeadline) {
+      setCountdown(null)
+      setDeadlineExpired(false)
+      return
+    }
+    const deadlineMs = new Date(proc.negotiationDeadline).getTime()
+    const tick = () => {
+      const remaining = deadlineMs - Date.now()
+      if (remaining <= 0) {
+        setCountdown('00:00')
+        setDeadlineExpired(true)
+        return
+      }
+      const mins = Math.floor(remaining / 60000)
+      const secs = Math.floor((remaining % 60000) / 1000)
+      setCountdown(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`)
+      setDeadlineExpired(false)
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [proc?.status, proc?.negotiationDeadline])
+
+  // Auto-expire negotiation when deadline passes
+  useEffect(() => {
+    if (!deadlineExpired || !proc || proc.status !== 'NEGOTIATING' || !address) return
+    addEvent.mutateAsync({
+      type: EVENT_TYPES.NEGOTIATION_EXPIRED,
+      assetId: proc.assetId,
+      processId: proc.id,
+      sender: address,
+    }).catch(() => {})
+  }, [deadlineExpired]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isConnected) {
     return (
@@ -161,8 +199,6 @@ export default function ProcessDetailPage() {
     (isOwner && (proc.status === 'DRAFT' || proc.status === 'NEGOTIATING')) ||
     (isRenter && proc.status === 'NEGOTIATING')
 
-  const canEditDeadline = isOwner && (proc.status === 'DRAFT' || proc.status === 'NEGOTIATING')
-
   const fireEvent = async (type: string, metadata?: Record<string, unknown>) => {
     await addEvent.mutateAsync({
       type,
@@ -176,7 +212,7 @@ export default function ProcessDetailPage() {
   const handleUploadAndProof = async (eventType: string) => {
     if (!file) return
     try {
-      const uploaded = await uploadMutation.mutateAsync(file)
+      const uploaded = await uploadMutation.mutateAsync({ file, processId: proc.id })
       await submitProof.submit(proc.assetId, uploaded.hash, eventType, proc.id)
       setFile(null)
     } catch {
@@ -198,17 +234,9 @@ export default function ProcessDetailPage() {
     setEditingTerms(false)
   }
 
-  const handleSaveDeadline = async () => {
-    if (!deadline) return
-    await updateProcess.mutateAsync({
-      id: proc.id,
-      negotiationDeadline: new Date(deadline).toISOString(),
-    })
-  }
-
   const handleVerifyProof = async () => {
     if (!latestProofHash) return
-    await verifyAsset.verify(proc.assetId, latestProofHash, 'PROOF_VERIFIED')
+    await verifyAsset.verify(proc.assetId, latestProofHash, EVENT_TYPES.PROOF_VERIFIED, proc.id)
   }
 
   const displayTerms = proc.agreedTerms ?? template?.terms
@@ -408,31 +436,37 @@ export default function ProcessDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Negotiation Deadline (owner, DRAFT/NEGOTIATING) */}
-        {canEditDeadline && (
+        {/* Negotiation status (visible during NEGOTIATING) */}
+        {proc.status === 'NEGOTIATING' && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Negotiation Deadline</CardTitle>
-              <CardDescription>Set or update the deadline for the negotiation window</CardDescription>
+              <CardTitle className="text-base">Negotiation</CardTitle>
+              <CardDescription>Both parties must accept the terms before the deadline</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-2">
-                  <Label>Deadline</Label>
-                  <Input
-                    type="datetime-local"
-                    value={deadline}
-                    onChange={(e) => setDeadline(e.target.value)}
-                    className="max-w-xs"
-                  />
+            <CardContent className="space-y-4">
+              {countdown && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-muted-foreground">Time remaining:</span>
+                  <span className={`font-mono text-lg font-bold ${deadlineExpired ? 'text-destructive' : ''}`}>
+                    {deadlineExpired ? 'Expired' : countdown}
+                  </span>
                 </div>
-                <Button
-                  onClick={handleSaveDeadline}
-                  disabled={!deadline || updateProcess.isPending}
-                >
-                  {updateProcess.isPending ? 'Saving...' : 'Set Deadline'}
-                </Button>
+              )}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="flex items-center gap-2 rounded-md border border-border p-3">
+                  <div className={`h-2.5 w-2.5 rounded-full ${proc.ownerAccepted ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+                  <span className="text-sm">Owner: {proc.ownerAccepted ? 'Accepted' : 'Pending'}</span>
+                </div>
+                <div className="flex items-center gap-2 rounded-md border border-border p-3">
+                  <div className={`h-2.5 w-2.5 rounded-full ${proc.renterAccepted ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+                  <span className="text-sm">Renter: {proc.renterAccepted ? 'Accepted' : 'Pending'}</span>
+                </div>
               </div>
+              {proc.negotiationDeadline && (
+                <p className="text-xs text-muted-foreground">
+                  Deadline: {new Date(proc.negotiationDeadline).toLocaleString()}
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -445,7 +479,7 @@ export default function ProcessDetailPage() {
           <CardContent className="space-y-4">
             {/* Owner: initiate */}
             {isOwner && proc.status === 'DRAFT' && (
-              <Button onClick={() => fireEvent('RENTAL_INITIATED')} disabled={addEvent.isPending}>
+              <Button onClick={() => fireEvent(EVENT_TYPES.RENTAL_INITIATED)} disabled={addEvent.isPending}>
                 {addEvent.isPending ? 'Processing...' : 'Initiate Rental'}
               </Button>
             )}
@@ -453,30 +487,51 @@ export default function ProcessDetailPage() {
             {/* Renter: confirm participation */}
             {isRenter && proc.status === 'PENDING_RENTER' && (
               <div className="flex gap-2">
-                <Button onClick={() => fireEvent('PARTICIPATION_CONFIRMED')} disabled={addEvent.isPending}>
+                <Button onClick={() => fireEvent(EVENT_TYPES.PARTICIPATION_CONFIRMED)} disabled={addEvent.isPending}>
                   {addEvent.isPending ? 'Confirming...' : 'Confirm Participation'}
                 </Button>
-                <Button variant="destructive" onClick={() => fireEvent('TERMS_REJECTED')} disabled={addEvent.isPending}>
+                <Button variant="destructive" onClick={() => fireEvent(EVENT_TYPES.TERMS_REJECTED)} disabled={addEvent.isPending}>
                   Reject
                 </Button>
               </div>
             )}
 
             {/* Negotiating: counter-offer hint + accept / reject */}
-            {proc.status === 'NEGOTIATING' && (isOwner || isRenter) && (
+            {proc.status === 'NEGOTIATING' && (isOwner || isRenter) && !deadlineExpired && (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  You can edit the terms above to propose a counter-offer, then accept once both parties agree.
+                  Edit the terms above to propose a counter-offer (this resets both acceptances).
+                  Once both parties accept, terms are locked.
                 </p>
-                <div className="flex gap-2">
-                  <Button onClick={() => fireEvent('TERMS_ACCEPTED')} disabled={addEvent.isPending}>
-                    {addEvent.isPending ? 'Accepting...' : 'Accept Terms'}
-                  </Button>
-                  <Button variant="destructive" onClick={() => fireEvent('TERMS_REJECTED')} disabled={addEvent.isPending}>
-                    Reject
-                  </Button>
-                </div>
+                {(() => {
+                  const alreadyAccepted =
+                    (isOwner && proc.ownerAccepted) || (isRenter && proc.renterAccepted)
+                  return (
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => fireEvent(EVENT_TYPES.TERMS_ACCEPTED)}
+                        disabled={addEvent.isPending || Boolean(alreadyAccepted)}
+                      >
+                        {alreadyAccepted
+                          ? 'You accepted — waiting for other party'
+                          : addEvent.isPending
+                            ? 'Accepting...'
+                            : 'Accept Terms'}
+                      </Button>
+                      <Button variant="destructive" onClick={() => fireEvent(EVENT_TYPES.TERMS_REJECTED)} disabled={addEvent.isPending}>
+                        Reject
+                      </Button>
+                    </div>
+                  )
+                })()}
               </div>
+            )}
+
+            {/* Negotiation expired */}
+            {proc.status === 'EXPIRED' && (
+              <p className="text-sm text-orange-600 dark:text-orange-400">
+                Negotiation expired. Both parties did not accept within the deadline.
+              </p>
             )}
 
             {/* Step 1: Renter uploads deposit receipt + on-chain proof */}
@@ -485,7 +540,7 @@ export default function ProcessDetailPage() {
                 <p className="text-sm font-medium">Upload deposit receipt</p>
                 <Input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="max-w-sm" />
                 <Button
-                  onClick={() => handleUploadAndProof('DEPOSIT_DECLARED')}
+                  onClick={() => handleUploadAndProof(EVENT_TYPES.DEPOSIT_DECLARED)}
                   disabled={!file || uploadMutation.isPending || submitProof.loading}
                 >
                   {uploadMutation.isPending || submitProof.loading ? 'Submitting...' : 'Declare Deposit'}
@@ -502,7 +557,7 @@ export default function ProcessDetailPage() {
                     submitProof.submit(
                       proc.assetId,
                       '0x' + '0'.repeat(64),
-                      'DEPOSIT_CONFIRMED',
+                      EVENT_TYPES.DEPOSIT_CONFIRMED,
                       proc.id,
                     )
                   }
@@ -519,7 +574,7 @@ export default function ProcessDetailPage() {
                 <p className="text-sm font-medium">Upload handover proof</p>
                 <Input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="max-w-sm" />
                 <Button
-                  onClick={() => handleUploadAndProof('HANDOVER_PROOF')}
+                  onClick={() => handleUploadAndProof(EVENT_TYPES.HANDOVER_PROOF)}
                   disabled={!file || uploadMutation.isPending || submitProof.loading}
                 >
                   {uploadMutation.isPending || submitProof.loading ? 'Uploading...' : 'Upload & Submit Proof'}
@@ -535,7 +590,7 @@ export default function ProcessDetailPage() {
                     <p className="text-sm font-medium">Upload return proof</p>
                     <Input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="max-w-sm" />
                     <Button
-                      onClick={() => handleUploadAndProof('RETURN_PROOF')}
+                      onClick={() => handleUploadAndProof(EVENT_TYPES.RETURN_PROOF)}
                       disabled={!file || uploadMutation.isPending || submitProof.loading}
                     >
                       {uploadMutation.isPending || submitProof.loading ? 'Uploading...' : 'Upload Return Proof'}
@@ -573,7 +628,7 @@ export default function ProcessDetailPage() {
                     <Button
                       variant="secondary"
                       onClick={async () => {
-                        await fireEvent('INCIDENT', incidentDesc ? { description: incidentDesc } : undefined)
+                        await fireEvent(EVENT_TYPES.INCIDENT, incidentDesc ? { description: incidentDesc } : undefined)
                         setIncidentDesc('')
                       }}
                       disabled={addEvent.isPending}
@@ -606,7 +661,7 @@ export default function ProcessDetailPage() {
 
             {/* Owner: verify return */}
             {isOwner && proc.status === 'RETURN_PENDING' && (
-              <Button onClick={() => fireEvent('RETURN_VERIFIED')} disabled={addEvent.isPending}>
+              <Button onClick={() => fireEvent(EVENT_TYPES.RETURN_VERIFIED)} disabled={addEvent.isPending}>
                 {addEvent.isPending ? 'Verifying...' : 'Verify Return'}
               </Button>
             )}
@@ -626,7 +681,7 @@ export default function ProcessDetailPage() {
                     <option value="withheld">Withheld</option>
                   </select>
                 </div>
-                <Button onClick={() => fireEvent('DEPOSIT_RESOLVED', { resolution: depositResolution })} disabled={addEvent.isPending}>
+                <Button onClick={() => fireEvent(EVENT_TYPES.DEPOSIT_RESOLVED, { resolution: depositResolution })} disabled={addEvent.isPending}>
                   {addEvent.isPending ? 'Resolving...' : 'Resolve Deposit'}
                 </Button>
               </div>
@@ -634,7 +689,7 @@ export default function ProcessDetailPage() {
 
             {/* Renter: confirm deposit resolution */}
             {isRenter && proc.status === 'DEPOSIT_RESOLVING' && (
-              <Button onClick={() => fireEvent('RESOLUTION_CONFIRMED')} disabled={addEvent.isPending}>
+              <Button onClick={() => fireEvent(EVENT_TYPES.RESOLUTION_CONFIRMED)} disabled={addEvent.isPending}>
                 {addEvent.isPending ? 'Confirming...' : 'Confirm Deposit Resolution'}
               </Button>
             )}

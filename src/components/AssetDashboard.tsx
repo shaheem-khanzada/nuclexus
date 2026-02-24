@@ -41,7 +41,7 @@ function CreateAssetCard() {
     if (!file) return
     setUploadResult(null)
     try {
-      const data = await uploadMutation.mutateAsync(file)
+      const data = await uploadMutation.mutateAsync({ file })
       setUploadResult({ url: data.url, hash: data.hash, name: data.name })
       setStep('uploaded')
       if (createdAssetId && address) {

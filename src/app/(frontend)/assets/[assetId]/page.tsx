@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { EVENT_TYPES } from '@/lib/constants/eventTypes'
 
 export default function AssetDetailPage() {
   const params = useParams()
@@ -390,9 +391,9 @@ export default function AssetDetailPage() {
                           <td className="px-4 py-3">
                             <span
                               className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${
-                                e.type === 'CREATED'
+                                e.type === EVENT_TYPES.CREATED
                                   ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                                  : e.type === 'PROOF_SUBMITTED'
+                                  : e.type === EVENT_TYPES.PROOF_SUBMITTED
                                     ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
                                     : e.type === 'CLAIM'
                                       ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'

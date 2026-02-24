@@ -23,7 +23,6 @@ export type EventItem = {
   sender: string
   proofHash?: string
   timestamp: number
-  validator?: string
   transactionHash?: string
   blockNumber?: string
   metadata?: Record<string, unknown>
@@ -83,6 +82,8 @@ export type ProcessItem = {
   participants: Participant[]
   status: string
   agreedTerms?: Omit<TermsData, 'negotiable'>
+  ownerAccepted?: boolean
+  renterAccepted?: boolean
   negotiationDeadline?: string
   startDate?: string
   endDate?: string
@@ -113,7 +114,7 @@ export type TxPayload = {
 
 /** Upload API response */
 export type UploadResponse = {
-  path: string
+  id: string
   url: string
   hash: string
   size: number

@@ -21,6 +21,7 @@
     "@payloadcms/db-mongodb": "3.76.1",
     "@payloadcms/next": "3.76.1",
     "@payloadcms/richtext-lexical": "3.76.1",
+    "@payloadcms/storage-vercel-blob": "3.76.1",
     "@payloadcms/ui": "3.76.1",
     "@radix-ui/react-label": "^2.0.2",
     "@rainbow-me/rainbowkit": "^2.2.0",

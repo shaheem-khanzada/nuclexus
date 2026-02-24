@@ -1,4 +1,5 @@
 import type { CollectionAfterChangeHook } from 'payload'
+import { EVENT_TYPES } from '@/lib/constants/eventTypes'
 
 const ZERO_BYTES32 = '0x' + '0'.repeat(64)
 
@@ -28,7 +29,7 @@ export const eventsSyncAssetAfterChange: CollectionAfterChangeHook = async ({
     overrideAccess: true,
   })
 
-  if (type === 'CREATED' && existing.docs.length === 0) {
+  if (type === EVENT_TYPES.CREATED && existing.docs.length === 0) {
     await req.payload.create({
       collection: 'assets',
       data: {

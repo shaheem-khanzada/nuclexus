@@ -154,6 +154,8 @@ export interface User {
 export interface Media {
   id: string;
   alt: string;
+  hash?: string | null;
+  process?: (string | null) | Process;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -165,6 +167,120 @@ export interface Media {
   height?: number | null;
   focalX?: number | null;
   focalY?: number | null;
+}
+/**
+ * Active instance of a Template applied to an Asset. Tracks the full lifecycle.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "processes".
+ */
+export interface Process {
+  id: string;
+  assetId: number;
+  template: string | Template;
+  /**
+   * Wallet address of the asset owner who initiated the process.
+   */
+  owner: string;
+  /**
+   * Role-to-wallet mapping. Every template role must be assigned an address.
+   */
+  participants: {
+    role: string;
+    address: string;
+    id?: string | null;
+  }[];
+  status:
+    | 'DRAFT'
+    | 'PENDING_RENTER'
+    | 'NEGOTIATING'
+    | 'TERMS_AGREED'
+    | 'DEPOSIT_PENDING'
+    | 'DEPOSIT_DECLARED'
+    | 'ACTIVE'
+    | 'RETURN_PENDING'
+    | 'RETURN_VERIFIED'
+    | 'DEPOSIT_RESOLVING'
+    | 'COMPLETED'
+    | 'REJECTED'
+    | 'EXPIRED';
+  /**
+   * Snapshot of the final negotiated terms.
+   */
+  agreedTerms?: {
+    price?: number | null;
+    currency?: string | null;
+    duration?: number | null;
+    durationUnit?: ('hours' | 'days' | 'weeks' | 'months') | null;
+    deposit?: number | null;
+  };
+  /**
+   * Whether the owner has accepted the current terms during negotiation.
+   */
+  ownerAccepted?: boolean | null;
+  /**
+   * Whether the renter has accepted the current terms during negotiation.
+   */
+  renterAccepted?: boolean | null;
+  /**
+   * Auto-set when negotiation starts. Deadline for the negotiation window.
+   */
+  negotiationDeadline?: string | null;
+  /**
+   * Set when rental becomes ACTIVE.
+   */
+  startDate?: string | null;
+  /**
+   * Computed from startDate + agreed duration when ACTIVE.
+   */
+  endDate?: string | null;
+  /**
+   * Set by owner when resolving deposit at end of rental.
+   */
+  depositResolution?: ('returned' | 'partial' | 'withheld') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Reusable service blueprints (rental, lease, etc.). A Process is created from a Template.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates".
+ */
+export interface Template {
+  id: string;
+  name: string;
+  /**
+   * Service type. Add more options as new services are introduced.
+   */
+  type: 'rental';
+  description?: string | null;
+  /**
+   * Roles required for this process type. Each participant is assigned a role.
+   */
+  roles: {
+    name: string;
+    label: string;
+    id?: string | null;
+  }[];
+  /**
+   * Wallet address of the template author.
+   */
+  creator: string;
+  terms: {
+    price: number;
+    currency?: string | null;
+    duration: number;
+    durationUnit: 'hours' | 'days' | 'weeks' | 'months';
+    deposit: number;
+    negotiable?: boolean | null;
+    /**
+     * Negotiation window in minutes (default 30). Only used when negotiable is true.
+     */
+    negotiationDuration?: number | null;
+  };
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -215,7 +331,6 @@ export interface Event {
   sender: string;
   proofHash?: string | null;
   timestamp: number;
-  validator?: string | null;
   transactionHash?: string | null;
   blockNumber?: string | null;
   /**
@@ -230,107 +345,6 @@ export interface Event {
     | number
     | boolean
     | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Reusable service blueprints (rental, lease, etc.). A Process is created from a Template.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "templates".
- */
-export interface Template {
-  id: string;
-  name: string;
-  /**
-   * Service type. Add more options as new services are introduced.
-   */
-  type: 'rental';
-  description?: string | null;
-  /**
-   * Roles required for this process type. Each participant is assigned a role.
-   */
-  roles: {
-    name: string;
-    label: string;
-    id?: string | null;
-  }[];
-  /**
-   * Wallet address of the template author.
-   */
-  creator: string;
-  terms: {
-    price: number;
-    currency?: string | null;
-    duration: number;
-    durationUnit: 'hours' | 'days' | 'weeks' | 'months';
-    deposit: number;
-    negotiable?: boolean | null;
-  };
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Active instance of a Template applied to an Asset. Tracks the full lifecycle.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "processes".
- */
-export interface Process {
-  id: string;
-  assetId: number;
-  template: string | Template;
-  /**
-   * Wallet address of the asset owner who initiated the process.
-   */
-  owner: string;
-  /**
-   * Role-to-wallet mapping. Every template role must be assigned an address.
-   */
-  participants: {
-    role: string;
-    address: string;
-    id?: string | null;
-  }[];
-  status:
-    | 'DRAFT'
-    | 'PENDING_RENTER'
-    | 'NEGOTIATING'
-    | 'TERMS_AGREED'
-    | 'DEPOSIT_PENDING'
-    | 'DEPOSIT_DECLARED'
-    | 'ACTIVE'
-    | 'RETURN_PENDING'
-    | 'RETURN_VERIFIED'
-    | 'DEPOSIT_RESOLVING'
-    | 'COMPLETED'
-    | 'REJECTED';
-  /**
-   * Snapshot of the final negotiated terms.
-   */
-  agreedTerms?: {
-    price?: number | null;
-    currency?: string | null;
-    duration?: number | null;
-    durationUnit?: ('hours' | 'days' | 'weeks' | 'months') | null;
-    deposit?: number | null;
-  };
-  /**
-   * Deadline for negotiation window (if negotiable).
-   */
-  negotiationDeadline?: string | null;
-  /**
-   * Set when rental becomes ACTIVE.
-   */
-  startDate?: string | null;
-  /**
-   * Computed from startDate + agreed duration when ACTIVE.
-   */
-  endDate?: string | null;
-  /**
-   * Set by owner when resolving deposit at end of rental.
-   */
-  depositResolution?: ('returned' | 'partial' | 'withheld') | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -452,6 +466,8 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface MediaSelect<T extends boolean = true> {
   alt?: T;
+  hash?: T;
+  process?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;
@@ -497,7 +513,6 @@ export interface EventsSelect<T extends boolean = true> {
   sender?: T;
   proofHash?: T;
   timestamp?: T;
-  validator?: T;
   transactionHash?: T;
   blockNumber?: T;
   metadata?: T;
@@ -529,6 +544,7 @@ export interface TemplatesSelect<T extends boolean = true> {
         durationUnit?: T;
         deposit?: T;
         negotiable?: T;
+        negotiationDuration?: T;
       };
   updatedAt?: T;
   createdAt?: T;
@@ -558,6 +574,8 @@ export interface ProcessesSelect<T extends boolean = true> {
         durationUnit?: T;
         deposit?: T;
       };
+  ownerAccepted?: T;
+  renterAccepted?: T;
   negotiationDeadline?: T;
   startDate?: T;
   endDate?: T;

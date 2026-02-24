@@ -5,6 +5,7 @@ import { useSendTransaction, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEventLogs } from 'viem'
 import { AssetRegistryABI } from '@/lib/contracts'
 import { fetchCreateAssetTx } from '@/lib/api'
+import { EVENT_TYPES } from '@/lib/constants/eventTypes'
 
 export function useCreateAsset() {
   const [loading, setLoading] = useState(false)
@@ -22,7 +23,7 @@ export function useCreateAsset() {
         logs: receipt.logs,
         eventName: 'RegistryEvent',
       })
-      const created = parsed.find((e) => e.args.eventType === 'CREATED')
+      const created = parsed.find((e) => e.args.eventType === EVENT_TYPES.CREATED)
       if (created?.args?.assetId != null) {
         setCreatedAssetId(String(created.args.assetId))
       }

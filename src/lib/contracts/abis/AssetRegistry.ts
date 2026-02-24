@@ -1,7 +1,7 @@
 /**
  * AssetRegistry contract ABI (slim, emit-only).
  * No on-chain storage of events/assets. Just emits RegistryEvent for transparency.
- * submitProof includes processId (uint256) for linking events to off-chain processes.
+ * Both submitProof and verifyAsset include processId (uint256) for linking events to off-chain processes.
  */
 export const AssetRegistryABI = [
   {
@@ -12,7 +12,6 @@ export const AssetRegistryABI = [
       { indexed: true, internalType: 'address', name: 'sender', type: 'address' },
       { indexed: false, internalType: 'bytes32', name: 'proofHash', type: 'bytes32' },
       { indexed: false, internalType: 'uint256', name: 'timestamp', type: 'uint256' },
-      { indexed: false, internalType: 'address', name: 'validator', type: 'address' },
       { indexed: false, internalType: 'uint256', name: 'processId', type: 'uint256' },
     ],
     name: 'RegistryEvent',
@@ -49,6 +48,7 @@ export const AssetRegistryABI = [
       { internalType: 'uint256', name: 'assetId', type: 'uint256' },
       { internalType: 'bytes32', name: 'proofHash', type: 'bytes32' },
       { internalType: 'string', name: 'eventType', type: 'string' },
+      { internalType: 'uint256', name: 'processId', type: 'uint256' },
     ],
     name: 'verifyAsset',
     outputs: [],

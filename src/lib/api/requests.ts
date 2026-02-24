@@ -102,11 +102,12 @@ export async function fetchVerifyAssetTx(
   assetId: number,
   proofHash: string,
   eventType?: string,
+  processId?: string,
 ): Promise<TxPayload> {
   const res = await fetch('/api/tx/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ assetId, proofHash, eventType }),
+    body: JSON.stringify({ assetId, proofHash, eventType, processId }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error ?? 'Failed to get tx')
@@ -168,13 +169,23 @@ export async function updateAsset(payload: {
   return { ok: true, created: true, id: createJson.doc?.id ?? createJson.id }
 }
 
-export async function uploadFile(file: File): Promise<UploadResponse> {
+export async function uploadFile(file: File, processId?: string): Promise<UploadResponse> {
   const form = new FormData()
-  form.set('file', file)
-  const res = await fetch('/api/upload', { method: 'POST', body: form })
+  form.append('file', file)
+  const payload: Record<string, unknown> = { alt: file.name }
+  if (processId) payload.process = processId
+  form.append('_payload', JSON.stringify(payload))
+  const res = await fetch('/api/media', { method: 'POST', body: form })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error ?? 'Upload failed')
-  return data as UploadResponse
+  if (!res.ok) throw new Error(data.errors?.[0]?.message ?? 'Upload failed')
+  const doc = data.doc ?? data
+  return {
+    id: doc.id,
+    url: doc.url,
+    hash: doc.hash,
+    size: doc.filesize,
+    name: doc.filename,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +202,6 @@ function normalizeEvent(e: Record<string, unknown>): EventItem {
     sender: e.sender as string,
     proofHash: (e.proofHash as string) ?? undefined,
     timestamp: e.timestamp as number,
-    validator: (e.validator as string) ?? undefined,
     transactionHash: (e.transactionHash as string) ?? undefined,
     blockNumber: (e.blockNumber as string) ?? undefined,
     metadata: (e.metadata as Record<string, unknown>) ?? undefined,

@@ -13,7 +13,6 @@ import {
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? ''
 const SIGNING_KEY = process.env.ALCHEMY_WEBHOOK_SIGNING_KEY ?? ''
 
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 const ZERO_BYTES32 = '0x' + '0'.repeat(64)
 
 export const dynamic = 'force-dynamic'
@@ -79,8 +78,6 @@ export async function POST(request: Request) {
 
       const proofHash =
         e.proofHash && e.proofHash.toLowerCase() !== ZERO_BYTES32 ? e.proofHash : undefined
-      const validator =
-        e.validator && e.validator.toLowerCase() !== ZERO_ADDRESS ? e.validator : undefined
 
       try {
         const eventData = {
@@ -91,7 +88,6 @@ export async function POST(request: Request) {
           timestamp: timestampNum,
           transactionHash: txHash,
           ...(proofHash != null && { proofHash }),
-          ...(validator != null && { validator }),
           ...(e.blockNumber != null && { blockNumber: e.blockNumber }),
           ...(e.processId != null && { processId: e.processId }),
         }

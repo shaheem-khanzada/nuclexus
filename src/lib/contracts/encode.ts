@@ -1,6 +1,7 @@
 import { Interface, type InterfaceAbi } from 'ethers'
 
 import { AssetRegistryABI } from './abis/AssetRegistry'
+import { EVENT_TYPES } from '@/lib/constants/eventTypes'
 
 const iface = new Interface(AssetRegistryABI as InterfaceAbi)
 
@@ -12,7 +13,7 @@ export type TxPayload = {
 
 export function encodeCreateAsset(
   contractAddress: string,
-  eventType: string = 'CREATED',
+  eventType: string = EVENT_TYPES.CREATED,
 ): TxPayload {
   const data = iface.encodeFunctionData('createAsset', [eventType])
   return { to: contractAddress, data, value: '0' }
@@ -37,7 +38,7 @@ export function encodeSubmitProof(
   contractAddress: string,
   assetId: number | bigint,
   proofHash: string,
-  eventType: string = 'PROOF_SUBMITTED',
+  eventType: string = EVENT_TYPES.PROOF_SUBMITTED,
   processId?: string,
 ): TxPayload {
   const hash = proofHash.startsWith('0x') ? proofHash : '0x' + proofHash
@@ -53,12 +54,14 @@ export function encodeVerifyAsset(
   contractAddress: string,
   assetId: number | bigint,
   proofHash: string,
-  eventType: string = 'ATTESTATION',
+  eventType: string = EVENT_TYPES.ATTESTATION,
+  processId?: string,
 ): TxPayload {
   const hash = proofHash.startsWith('0x') ? proofHash : '0x' + proofHash
   if (hash.length !== 66) {
     throw new Error('proofHash must be 32 bytes (0x + 64 hex chars)')
   }
-  const data = iface.encodeFunctionData('verifyAsset', [BigInt(assetId), hash, eventType])
+  const pid = mongoIdToUint256(processId)
+  const data = iface.encodeFunctionData('verifyAsset', [BigInt(assetId), hash, eventType, pid])
   return { to: contractAddress, data, value: '0' }
 }

@@ -159,7 +159,6 @@ export type DecodedRegistryEvent = {
   sender: string
   proofHash: string
   timestamp: bigint
-  validator: string
   processId: string | undefined
   transactionHash: string | undefined
   blockNumber: string | undefined
@@ -198,7 +197,6 @@ export function decodeRegistryEventLog(log: ContractLog): DecodedRegistryEvent |
     sender: args.sender,
     proofHash: args.proofHash,
     timestamp: args.timestamp,
-    validator: args.validator,
     processId,
     transactionHash: log.transactionHash,
     blockNumber: log.blockNumber,
