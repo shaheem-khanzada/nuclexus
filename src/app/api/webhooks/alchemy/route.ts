@@ -80,6 +80,13 @@ export async function POST(request: Request) {
         e.proofHash && e.proofHash.toLowerCase() !== ZERO_BYTES32 ? e.proofHash : undefined
 
       try {
+        const existing = await payloadInstance.find({
+          collection: 'events',
+          where: { transactionHash: { equals: txHash } },
+          limit: 1,
+        })
+        if (existing.docs.length > 0) continue
+
         const eventData = {
           assetId: assetIdNum,
           type: e.type,

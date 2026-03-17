@@ -73,7 +73,9 @@ export interface Config {
     events: Event;
     templates: Template;
     processes: Process;
+    'workflow-templates': WorkflowTemplate;
     'payload-kv': PayloadKv;
+    'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -86,7 +88,9 @@ export interface Config {
     events: EventsSelect<false> | EventsSelect<true>;
     templates: TemplatesSelect<false> | TemplatesSelect<true>;
     processes: ProcessesSelect<false> | ProcessesSelect<true>;
+    'workflow-templates': WorkflowTemplatesSelect<false> | WorkflowTemplatesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
+    'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -100,7 +104,13 @@ export interface Config {
   locale: null;
   user: User;
   jobs: {
-    tasks: unknown;
+    tasks: {
+      expireProcesses: TaskExpireProcesses;
+      inline: {
+        input: unknown;
+        output: unknown;
+      };
+    };
     workflows: unknown;
   };
 }
@@ -196,7 +206,7 @@ export interface Process {
     | 'NEGOTIATING'
     | 'TERMS_AGREED'
     | 'DEPOSIT_PENDING'
-    | 'DEPOSIT_DECLARED'
+    | 'DEPOSIT_CONFIRMED'
     | 'ACTIVE'
     | 'RETURN_PENDING'
     | 'RETURN_VERIFIED'
@@ -349,6 +359,128 @@ export interface Event {
   createdAt: string;
 }
 /**
+ * Experimental workflow-driven service blueprints. Each template defines stages composed of reusable action blocks.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workflow-templates".
+ */
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  /**
+   * Service type identifier (e.g. rental, lending, escrow).
+   */
+  type: string;
+  description?: string | null;
+  /**
+   * Wallet address of the template author.
+   */
+  creator: string;
+  /**
+   * Roles required for this workflow. Each participant is assigned a role.
+   */
+  roles: {
+    name: string;
+    label: string;
+    id?: string | null;
+  }[];
+  /**
+   * Default terms for this service. Can be overridden during negotiation.
+   */
+  terms?: {
+    price?: number | null;
+    currency?: string | null;
+    duration?: number | null;
+    durationUnit?: ('hours' | 'days' | 'weeks' | 'months') | null;
+    deposit?: number | null;
+    negotiable?: boolean | null;
+    /**
+     * Negotiation window in minutes.
+     */
+    negotiationDuration?: number | null;
+  };
+  /**
+   * Ordered workflow stages. Each stage defines available actions, roles, and transitions.
+   */
+  stages: {
+    /**
+     * Stage identifier used as process status (e.g. DRAFT, ACTIVE, COMPLETED).
+     */
+    name: string;
+    /**
+     * Human-readable stage name shown in the UI.
+     */
+    label: string;
+    /**
+     * Action blocks available at this stage.
+     */
+    actions?:
+      | {
+          /**
+           * The action block type.
+           */
+          block:
+            | 'confirm'
+            | 'reject'
+            | 'upload_proof'
+            | 'verify_proof'
+            | 'negotiate_terms'
+            | 'accept_terms'
+            | 'declare_deposit'
+            | 'confirm_deposit'
+            | 'resolve_deposit'
+            | 'log_incident';
+          /**
+           * Custom button label (optional, falls back to block default).
+           */
+          label?: string | null;
+          /**
+           * Array of role names that can execute this action, e.g. ["owner", "renter"].
+           */
+          roles:
+            | {
+                [k: string]: unknown;
+              }
+            | unknown[]
+            | string
+            | number
+            | boolean
+            | null;
+          /**
+           * Event type emitted when this action is executed (e.g. DEPOSIT_DECLARED).
+           */
+          eventType?: string | null;
+          /**
+           * Stage name to transition to on success. Leave blank for non-transitioning actions.
+           */
+          transitionsTo?: string | null;
+          /**
+           * Whether this action triggers an on-chain transaction.
+           */
+          requiresOnChain?: boolean | null;
+          id?: string | null;
+        }[]
+      | null;
+    /**
+     * Optional auto-transition when time expires at this stage.
+     */
+    timeout?: {
+      /**
+       * Timeout duration.
+       */
+      duration?: number | null;
+      unit?: ('minutes' | 'hours' | 'days') | null;
+      /**
+       * Stage to transition to on timeout (e.g. EXPIRED).
+       */
+      transitionsTo?: string | null;
+    };
+    id?: string | null;
+  }[];
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -364,6 +496,98 @@ export interface PayloadKv {
     | number
     | boolean
     | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs".
+ */
+export interface PayloadJob {
+  id: string;
+  /**
+   * Input data provided to the job
+   */
+  input?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  taskStatus?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  completedAt?: string | null;
+  totalTried?: number | null;
+  /**
+   * If hasError is true this job will not be retried
+   */
+  hasError?: boolean | null;
+  /**
+   * If hasError is true, this is the error that caused it
+   */
+  error?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Task execution log
+   */
+  log?:
+    | {
+        executedAt: string;
+        completedAt: string;
+        taskSlug: 'inline' | 'expireProcesses';
+        taskID: string;
+        input?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        output?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        state: 'failed' | 'succeeded';
+        error?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  taskSlug?: ('inline' | 'expireProcesses') | null;
+  queue?: string | null;
+  waitUntil?: string | null;
+  processing?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -395,6 +619,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'processes';
         value: string | Process;
+      } | null)
+    | ({
+        relationTo: 'workflow-templates';
+        value: string | WorkflowTemplate;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -585,11 +813,97 @@ export interface ProcessesSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workflow-templates_select".
+ */
+export interface WorkflowTemplatesSelect<T extends boolean = true> {
+  name?: T;
+  type?: T;
+  description?: T;
+  creator?: T;
+  roles?:
+    | T
+    | {
+        name?: T;
+        label?: T;
+        id?: T;
+      };
+  terms?:
+    | T
+    | {
+        price?: T;
+        currency?: T;
+        duration?: T;
+        durationUnit?: T;
+        deposit?: T;
+        negotiable?: T;
+        negotiationDuration?: T;
+      };
+  stages?:
+    | T
+    | {
+        name?: T;
+        label?: T;
+        actions?:
+          | T
+          | {
+              block?: T;
+              label?: T;
+              roles?: T;
+              eventType?: T;
+              transitionsTo?: T;
+              requiresOnChain?: T;
+              id?: T;
+            };
+        timeout?:
+          | T
+          | {
+              duration?: T;
+              unit?: T;
+              transitionsTo?: T;
+            };
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv_select".
  */
 export interface PayloadKvSelect<T extends boolean = true> {
   key?: T;
   data?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs_select".
+ */
+export interface PayloadJobsSelect<T extends boolean = true> {
+  input?: T;
+  taskStatus?: T;
+  completedAt?: T;
+  totalTried?: T;
+  hasError?: T;
+  error?: T;
+  log?:
+    | T
+    | {
+        executedAt?: T;
+        completedAt?: T;
+        taskSlug?: T;
+        taskID?: T;
+        input?: T;
+        output?: T;
+        state?: T;
+        error?: T;
+        id?: T;
+      };
+  taskSlug?: T;
+  queue?: T;
+  waitUntil?: T;
+  processing?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -622,6 +936,16 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskExpireProcesses".
+ */
+export interface TaskExpireProcesses {
+  input?: unknown;
+  output: {
+    expired?: number | null;
+  };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

@@ -12,6 +12,7 @@ import { Media } from './collections/Media'
 import { Processes } from './collections/Processes'
 import { Templates } from './collections/Templates'
 import { Users } from './collections/Users'
+import { WorkflowTemplates } from './collections/WorkflowTemplates'
 import { contractTxEndpoints } from './endpoints'
 
 const filename = fileURLToPath(import.meta.url)
@@ -24,7 +25,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Media, Assets, Events, Templates, Processes],
+  collections: [Users, Media, Assets, Events, Templates, Processes, WorkflowTemplates],
   endpoints: contractTxEndpoints,
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
@@ -35,6 +36,21 @@ export default buildConfig({
     url: process.env.MONGODB_URI || '',
   }),
   sharp,
+  jobs: {
+    tasks: [
+      {
+        slug: 'expireProcesses',
+        handler: async ({ req }) => {
+          const { expireProcesses } = await import('./tasks/expireProcesses')
+          const result = await expireProcesses(req.payload)
+          return { output: result }
+        },
+        outputSchema: [
+          { name: 'expired', type: 'number' },
+        ],
+      },
+    ],
+  },
   plugins: [
     vercelBlobStorage({
       collections: { media: true },

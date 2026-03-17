@@ -385,6 +385,7 @@ export async function addProcessEvent(payload: {
   processId: string
   sender: string
   metadata?: Record<string, unknown>
+  proofHash?: string
 }): Promise<EventItem> {
   const res = await fetch('/api/events', {
     method: 'POST',

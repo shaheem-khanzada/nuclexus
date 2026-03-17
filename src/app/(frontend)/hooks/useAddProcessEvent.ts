@@ -9,6 +9,7 @@ type AddEventPayload = {
   processId: string
   sender: string
   metadata?: Record<string, unknown>
+  proofHash?: string
 }
 
 export function useAddProcessEvent() {

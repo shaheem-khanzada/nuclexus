@@ -11,9 +11,9 @@ import {
   useUpdateProcess,
   useSubmitProof,
   useUpload,
-  useVerifyAsset,
 } from '@/app/(frontend)/hooks'
 import type { TemplateItem, TermsData } from '@/lib/api'
+import { ValidatorPanel } from '@/app/(frontend)/components/ValidatorPanel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -26,7 +26,7 @@ const STATUS_COLOR: Record<string, string> = {
   NEGOTIATING: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
   TERMS_AGREED: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
   DEPOSIT_PENDING: 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400',
-  DEPOSIT_DECLARED: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+  DEPOSIT_CONFIRMED: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
   ACTIVE: 'bg-green-500/20 text-green-600 dark:text-green-400',
   RETURN_PENDING: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
   RETURN_VERIFIED: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
@@ -38,8 +38,8 @@ const STATUS_COLOR: Record<string, string> = {
 
 const DURATION_UNITS = ['hours', 'days', 'weeks', 'months'] as const
 
-const PROOF_EVENT_TYPES: Set<string> = new Set([EVENT_TYPES.HANDOVER_PROOF, EVENT_TYPES.RETURN_PROOF])
 const VERIFIER_ROLES = new Set(['validator', 'witness'])
+const TERMINAL_STATUSES = new Set(['COMPLETED', 'REJECTED', 'EXPIRED'])
 
 type TermsForm = {
   price: string
@@ -72,7 +72,6 @@ export default function ProcessDetailPage() {
   const updateProcess = useUpdateProcess()
   const submitProof = useSubmitProof()
   const uploadMutation = useUpload()
-  const verifyAsset = useVerifyAsset()
 
   const [file, setFile] = useState<File | null>(null)
   const [depositResolution, setDepositResolution] = useState<string>('returned')
@@ -88,7 +87,6 @@ export default function ProcessDetailPage() {
     const errs: string[] = []
     if (addEvent.error) errs.push(addEvent.error instanceof Error ? addEvent.error.message : 'Action failed')
     if (updateProcess.error) errs.push(updateProcess.error instanceof Error ? updateProcess.error.message : 'Update failed')
-    if (verifyAsset.error) errs.push(verifyAsset.error)
     return errs.length ? errs.join('; ') : null
   })()
 
@@ -105,11 +103,6 @@ export default function ProcessDetailPage() {
   const isRenter = userRole === 'renter'
   const isVerifier = VERIFIER_ROLES.has(userRole ?? '')
   const template = proc ? (typeof proc.template === 'object' ? (proc.template as TemplateItem) : null) : null
-
-  const latestProofHash = useMemo(() => {
-    const proofEvent = events.find((e) => PROOF_EVENT_TYPES.has(e.type) && e.proofHash)
-    return proofEvent?.proofHash ?? null
-  }, [events])
 
   useEffect(() => {
     if (!proc) return
@@ -141,17 +134,6 @@ export default function ProcessDetailPage() {
     const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
   }, [proc?.status, proc?.negotiationDeadline])
-
-  // Auto-expire negotiation when deadline passes
-  useEffect(() => {
-    if (!deadlineExpired || !proc || proc.status !== 'NEGOTIATING' || !address) return
-    addEvent.mutateAsync({
-      type: EVENT_TYPES.NEGOTIATION_EXPIRED,
-      assetId: proc.assetId,
-      processId: proc.id,
-      sender: address,
-    }).catch(() => {})
-  }, [deadlineExpired]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isConnected) {
     return (
@@ -232,11 +214,6 @@ export default function ProcessDetailPage() {
       },
     })
     setEditingTerms(false)
-  }
-
-  const handleVerifyProof = async () => {
-    if (!latestProofHash) return
-    await verifyAsset.verify(proc.assetId, latestProofHash, EVENT_TYPES.PROOF_VERIFIED, proc.id)
   }
 
   const displayTerms = proc.agreedTerms ?? template?.terms
@@ -569,7 +546,7 @@ export default function ProcessDetailPage() {
             )}
 
             {/* Owner: upload handover proof */}
-            {isOwner && proc.status === 'DEPOSIT_DECLARED' && (
+            {isOwner && proc.status === 'DEPOSIT_CONFIRMED' && (
               <div className="space-y-3">
                 <p className="text-sm font-medium">Upload handover proof</p>
                 <Input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="max-w-sm" />
@@ -598,24 +575,6 @@ export default function ProcessDetailPage() {
                   </div>
                 )}
 
-                {isVerifier && latestProofHash && (
-                  <div className="space-y-3 rounded-md border border-border p-4">
-                    <p className="text-sm font-medium">Verify Proof On-Chain</p>
-                    <p className="text-xs text-muted-foreground">
-                      As a {userRole}, confirm the latest proof is correct by sending a verification transaction.
-                    </p>
-                    <Button
-                      onClick={handleVerifyProof}
-                      disabled={verifyAsset.loading}
-                    >
-                      {verifyAsset.loading ? 'Verifying...' : 'Verify Proof'}
-                    </Button>
-                    {verifyAsset.confirmed && (
-                      <p className="text-xs text-green-600 dark:text-green-400">Verification confirmed on-chain.</p>
-                    )}
-                  </div>
-                )}
-
                 {(isOwner || isRenter) && (
                   <div className="space-y-3 rounded-md border border-border p-4">
                     <p className="text-sm font-medium">Log an Incident</p>
@@ -636,25 +595,6 @@ export default function ProcessDetailPage() {
                       {addEvent.isPending ? 'Logging...' : 'Log Incident'}
                     </Button>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Verifier actions during RETURN_PENDING */}
-            {proc.status === 'RETURN_PENDING' && isVerifier && latestProofHash && (
-              <div className="space-y-3 rounded-md border border-border p-4">
-                <p className="text-sm font-medium">Verify Return Proof On-Chain</p>
-                <p className="text-xs text-muted-foreground">
-                  As a {userRole}, confirm the return proof is correct.
-                </p>
-                <Button
-                  onClick={handleVerifyProof}
-                  disabled={verifyAsset.loading}
-                >
-                  {verifyAsset.loading ? 'Verifying...' : 'Verify Proof'}
-                </Button>
-                {verifyAsset.confirmed && (
-                  <p className="text-xs text-green-600 dark:text-green-400">Verification confirmed on-chain.</p>
                 )}
               </div>
             )}
@@ -701,13 +641,24 @@ export default function ProcessDetailPage() {
               <p className="text-sm text-destructive">This rental was rejected.</p>
             )}
 
-            {!userRole && !['COMPLETED', 'REJECTED'].includes(proc.status) && (
+            {!userRole && !TERMINAL_STATUSES.has(proc.status) && (
               <p className="text-sm text-muted-foreground">
                 You are not a participant in this process. No actions available.
               </p>
             )}
           </CardContent>
         </Card>
+
+        {/* Validator Panel — available at all non-terminal statuses */}
+        {isVerifier && !TERMINAL_STATUSES.has(proc.status) && (
+          <ValidatorPanel
+            processId={proc.id}
+            assetId={proc.assetId}
+            userRole={userRole!}
+            walletAddress={address!}
+            events={events}
+          />
+        )}
 
         {/* Events Timeline */}
         <Card>
@@ -731,36 +682,67 @@ export default function ProcessDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {events.map((e) => (
-                      <tr key={e.id} className="border-b border-border last:border-0">
-                        <td className="px-4 py-3">
-                          <span className="inline-flex rounded bg-muted px-2 py-0.5 text-xs font-medium">
-                            {e.type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">{e.source}</td>
-                        <td className="px-4 py-3 font-mono text-muted-foreground">
-                          {shortAddr(e.sender)}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {new Date(e.createdAt).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3">
-                          {e.transactionHash ? (
-                            <a
-                              href={`https://sepolia.etherscan.io/tx/${e.transactionHash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-primary underline-offset-4 hover:underline"
-                            >
-                              {e.transactionHash.slice(0, 10)}...
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">&mdash;</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {events.map((e) => {
+                      const isAttestation = e.type === EVENT_TYPES.ATTESTATION
+                      const meta = isAttestation
+                        ? (e.metadata as { validationType?: string; notes?: string; mediaIds?: string[] } | undefined)
+                        : undefined
+                      return (
+                        <tr key={e.id} className="border-b border-border last:border-0">
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${isAttestation ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400' : 'bg-muted'}`}>
+                                {e.type}
+                              </span>
+                              {meta?.validationType && (
+                                <span className="inline-flex rounded bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                                  {meta.validationType}
+                                </span>
+                              )}
+                            </div>
+                            {meta?.notes && (
+                              <p className="mt-1 max-w-xs truncate text-xs text-muted-foreground">{meta.notes}</p>
+                            )}
+                            {meta?.mediaIds && meta.mediaIds.length > 0 && (
+                              <div className="mt-1 flex gap-1">
+                                {meta.mediaIds.map((mId) => (
+                                  <a
+                                    key={mId}
+                                    href={`/api/media/file/${mId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-primary underline-offset-4 hover:underline"
+                                  >
+                                    media
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">{e.source}</td>
+                          <td className="px-4 py-3 font-mono text-muted-foreground">
+                            {shortAddr(e.sender)}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {new Date(e.createdAt).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            {e.transactionHash ? (
+                              <a
+                                href={`https://sepolia.etherscan.io/tx/${e.transactionHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-primary underline-offset-4 hover:underline"
+                              >
+                                {e.transactionHash.slice(0, 10)}...
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">&mdash;</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

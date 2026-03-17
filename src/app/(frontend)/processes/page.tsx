@@ -18,7 +18,7 @@ const STATUS_COLOR: Record<string, string> = {
   NEGOTIATING: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
   TERMS_AGREED: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
   DEPOSIT_PENDING: 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400',
-  DEPOSIT_DECLARED: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+  DEPOSIT_CONFIRMED: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
   ACTIVE: 'bg-green-500/20 text-green-600 dark:text-green-400',
   RETURN_PENDING: 'bg-amber-500/20 text-amber-600 dark:text-amber-400',
   RETURN_VERIFIED: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
