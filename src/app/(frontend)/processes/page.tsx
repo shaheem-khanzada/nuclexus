@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useProcesses, useTemplates, useCreateProcess } from '@/app/(frontend)/hooks'
+import { useAssets, useProcesses, useTemplates, useCreateProcess } from '@/app/(frontend)/hooks'
 import type { ProcessItem, TemplateItem, Participant } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -64,6 +64,11 @@ export default function ProcessesPage() {
   const router = useRouter()
   const { address, isConnected } = useAccount()
 
+  const { data: myAssets = [], isLoading: myAssetsLoading } = useAssets({
+    creator: address ?? undefined,
+    enabled: !!address,
+  })
+
   const { data: myProcesses = [], isLoading: myLoading } = useProcesses({
     participantAddress: address ?? undefined,
     enabled: !!address,
@@ -86,7 +91,7 @@ export default function ProcessesPage() {
   const createProcess = useCreateProcess()
 
   const [showCreate, setShowCreate] = useState(false)
-  const [assetId, setAssetId] = useState('')
+  const [assetId, setAssetId] = useState<number | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [participantAddresses, setParticipantAddresses] = useState<Record<string, string>>({})
 
@@ -122,15 +127,15 @@ export default function ProcessesPage() {
   ) ?? false
 
   const handleCreate = async () => {
-    if (!address || !assetId || !selectedTemplate || !allParticipantsFilled) return
+    if (!address || assetId == null || !selectedTemplate || !allParticipantsFilled) return
     try {
       const p = await createProcess.mutateAsync({
-        assetId: Number(assetId),
+        assetId,
         template: selectedTemplate,
         owner: address,
         participants: buildParticipants(),
       })
-      setAssetId('')
+      setAssetId(null)
       setSelectedTemplate('')
       setParticipantAddresses({})
       setShowCreate(false)
@@ -179,13 +184,31 @@ export default function ProcessesPage() {
               {createError && <p className="text-sm text-destructive">{createError}</p>}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Asset ID</Label>
-                  <Input
-                    type="number"
-                    value={assetId}
-                    onChange={(e) => setAssetId(e.target.value)}
-                    placeholder="e.g. 1"
-                  />
+                  <Label>Asset</Label>
+                  {myAssetsLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading your assets...</p>
+                  ) : myAssets.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      You don’t have any assets yet.{' '}
+                      <Link href="/assets" className="text-primary underline-offset-4 hover:underline">
+                        Create one
+                      </Link>
+                      .
+                    </p>
+                  ) : (
+                    <select
+                      value={assetId ?? ''}
+                      onChange={(e) => setAssetId(e.target.value ? Number(e.target.value) : null)}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                    >
+                      <option value="">Select one of your assets</option>
+                      {myAssets.map((a) => (
+                        <option key={a.id} value={a.assetId}>
+                          {a.title ? `${a.title} — #${a.assetId}` : `Asset #${a.assetId}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Template</Label>
@@ -236,7 +259,7 @@ export default function ProcessesPage() {
 
               <Button
                 onClick={handleCreate}
-                disabled={!assetId || !selectedTemplate || !allParticipantsFilled || createProcess.isPending}
+                disabled={assetId == null || !selectedTemplate || !allParticipantsFilled || createProcess.isPending}
               >
                 {createProcess.isPending ? 'Creating...' : 'Create Process'}
               </Button>
